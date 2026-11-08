@@ -32,6 +32,15 @@ Finder Sync Extension, которое добавляет в меню по пра
 ```
 Скрипт сгенерирует проект, соберёт его, скопирует приложение в `/Applications`, включит расширение и перезапустит Finder.
 
+## Без Xcode: сборка на GitHub Actions
+Каждый пуш в `main` (или ручной запуск во вкладке Actions → Build → Run workflow) собирает приложение.
+1. Скачайте артефакт **FinderTools** со страницы запуска и распакуйте его (внутри `FinderTools.zip`, распакуйте и его).
+2. Перенесите `FinderTools.app` в `/Applications` и снимите карантин (сборка не нотаризована):
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/FinderTools.app
+   ```
+3. Откройте приложение и включите расширение (см. ниже).
+
 ## Через Xcode
 ```bash
 xcodegen generate
