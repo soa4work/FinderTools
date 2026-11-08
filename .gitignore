@@ -1,0 +1,11 @@
+# Xcode / XcodeGen
+*.xcodeproj/
+build/
+DerivedData/
+xcuserdata/
+# Генерируются XcodeGen из project.yml
+App/Info.plist
+App/*.entitlements
+Extension/Info.plist
+Extension/*.entitlements
+.DS_Store

@@ -1,0 +1,66 @@
+name: FinderTools
+options:
+  bundleIdPrefix: com.example.findertools
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Локальная ad-hoc подпись: собирается без Apple ID.
+    # Чтобы подписать своим аккаунтом, укажите DEVELOPMENT_TEAM и смените CODE_SIGN_STYLE на Automatic.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+
+targets:
+  FinderTools:
+    type: application
+    platform: macOS
+    sources: [App, Shared]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: FinderTools
+        LSApplicationCategoryType: public.app-category.utilities
+    entitlements:
+      path: App/FinderTools.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        # Общий файл настроек с расширением: ~/Library/Application Support/FinderTools/settings.json
+        com.apple.security.temporary-exception.files.home-relative-path.read-write:
+          - /Library/Application Support/FinderTools/
+    dependencies:
+      - target: FinderToolsExtension
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.findertools
+
+  FinderToolsExtension:
+    type: app-extension
+    platform: macOS
+    sources: [Extension, Shared]
+    info:
+      path: Extension/Info.plist
+      properties:
+        CFBundleDisplayName: FinderTools
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.FinderSync
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FinderSync
+          NSExtensionAttributes: {}
+    entitlements:
+      path: Extension/FinderToolsExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        # Finder Sync обязан быть в песочнице. Это исключение даёт право
+        # создавать файлы в любой папке (подходит для распространения вне App Store).
+        com.apple.security.temporary-exception.files.absolute-path.read-write:
+          - /
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.findertools.extension
