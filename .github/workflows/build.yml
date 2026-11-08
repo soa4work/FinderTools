@@ -1,0 +1,31 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild -project FinderTools.xcodeproj -scheme FinderTools -configuration Release \
+            -derivedDataPath build CODE_SIGN_IDENTITY=- build
+
+      # ditto сохраняет симлинки, права и подпись внутри .app (upload-artifact их теряет).
+      - name: Package
+        run: ditto -c -k --keepParent build/Build/Products/Release/FinderTools.app FinderTools.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FinderTools
+          path: FinderTools.zip

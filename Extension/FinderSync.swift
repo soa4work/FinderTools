@@ -170,12 +170,12 @@ final class FinderSync: FIFinderSync {
         }
     }
 
-    /// Папка, в которой создаются новые файлы: если выделена одна папка — внутри неё, иначе текущая.
+    /// Папка, в которой создаются новые файлы: если выделена одна папка — внутри неё,
+    /// если выделены файлы — рядом с первым (в режиме списка это может быть раскрытая подпапка), иначе текущая.
     private var destinationDirectory: URL? {
-        if context != .container,
-           let selected = finder.selectedItemURLs(), selected.count == 1,
-           isFolder(selected[0]) {
-            return selected[0]
+        if context != .container, let first = finder.selectedItemURLs()?.first {
+            if finder.selectedItemURLs()?.count == 1, isFolder(first) { return first }
+            return first.deletingLastPathComponent()
         }
         return finder.targetedURL()
     }
@@ -183,6 +183,11 @@ final class FinderSync: FIFinderSync {
     private func isFolder(_ url: URL) -> Bool {
         let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
         return values?.isDirectory == true && values?.isPackage != true
+    }
+
+    /// Обычный файл (не папка и не бандл вроде .app). Симлинки разыменовываются.
+    private func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
     }
 
     private func uniqueURL(in directory: URL, base: String, ext: String) -> URL {
@@ -233,6 +238,11 @@ final class FinderSync: FIFinderSync {
     @objc func createFromClipboard(_ sender: NSMenuItem) {
         guard let dir = destinationDirectory else { return fail() }
         let pasteboard = NSPasteboard.general
+        // Скопированный в Finder файл лежит в буфере ещё и строкой с именем.
+        // Вставлять файлы умеет сам Finder (Cmd+V), поэтому здесь отказываемся, а не пишем имя в .txt.
+        if pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
+            return fail()
+        }
         do {
             if let text = pasteboard.string(forType: .string) {
                 let url = uniqueURL(in: dir, base: "Из буфера обмена", ext: "txt")
@@ -283,7 +293,7 @@ final class FinderSync: FIFinderSync {
     @objc func copyFileURL(_ sender: NSMenuItem) { copyLines { $0.absoluteString } }
 
     @objc func copyContents(_ sender: NSMenuItem) {
-        guard let url = targetURLs.first, !isFolder(url) else { return fail() }
+        guard let url = targetURLs.first, isRegularFile(url) else { return fail() }
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= 10_000_000 else { return fail() }
         do {
@@ -294,17 +304,24 @@ final class FinderSync: FIFinderSync {
     }
 
     @objc func copySHA256(_ sender: NSMenuItem) {
-        let files = targetURLs.filter { !isFolder($0) }
+        let files = targetURLs.filter(isRegularFile)
         guard !files.isEmpty else { return fail() }
         DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let lines = try files.map { url -> String in
+            // Сбой на одном файле не отменяет остальные: копируем то, что посчиталось.
+            var failed = false
+            let lines = files.compactMap { url -> String? in
+                do {
                     let hash = try Self.sha256(of: url)
                     return files.count == 1 ? hash : "\(hash)  \(url.lastPathComponent)"
+                } catch {
+                    NSLog("FinderTools: %@", String(describing: error))
+                    failed = true
+                    return nil
                 }
-                DispatchQueue.main.async { self.copyToPasteboard(lines.joined(separator: "\n")) }
-            } catch {
-                DispatchQueue.main.async { self.fail(error) }
+            }
+            DispatchQueue.main.async {
+                if !lines.isEmpty { self.copyToPasteboard(lines.joined(separator: "\n")) }
+                if failed { self.fail() }
             }
         }
     }
@@ -313,7 +330,9 @@ final class FinderSync: FIFinderSync {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hasher = SHA256()
-        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+        // autoreleasepool обязателен: без него прочитанные куски живут до конца блока GCD
+        // и память растёт до размера файла.
+        while let chunk = try autoreleasepool(invoking: { try handle.read(upToCount: 1 << 20) }), !chunk.isEmpty {
             hasher.update(data: chunk)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
