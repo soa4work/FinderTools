@@ -7,7 +7,7 @@ struct FinderToolsApp: App {
     @StateObject private var store = SettingsStore()
 
     var body: some Scene {
-        WindowGroup("FinderTools") {
+        Window("FinderTools", id: "main") {
             SettingsView()
                 .environmentObject(store)
         }
